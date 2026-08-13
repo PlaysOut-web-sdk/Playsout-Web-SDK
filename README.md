@@ -35,11 +35,10 @@ Use the following sequence when the application starts:
 1. Initialize the SDK.
 2. Read the current login state.
 3. If the user is not logged in, call `Login()`.
-4. If the user is already logged in, optionally call `getUserInfo()` when the page requires the latest user information from the backend.
-5. Render `<playsout-widget>`.
-6. Use `locale` to control the language and `user-points` to display the gem amount.
+4. Render `<playsout-widget>`.
+5. Use `locale` to control the language and `user-points` to display the gem amount.
 
-`Login()` already fetches and stores the user information internally, so do not call `getUserInfo()` again immediately after a successful login. The SDK also stores the token and basic user information locally. When a session is restored and the page needs the latest backend data, call `getUserInfo()` once.
+During initialization, the SDK checks `expiresAt` and `refreshExpiresAt`. It uses a valid access token directly, refreshes an expired access token when the refresh token is still valid, and clears the session when the refresh token has expired. Do not use `getUserInfo()` as a startup gate. Call it only when a page explicitly needs fresh backend user data, and handle that request error separately so the widget can still render.
 
 ## Login Parameters
 
@@ -55,7 +54,7 @@ Required parameters:
 | --- | --- |
 | `platform` | Platform identifier. Use `'grab'` or `'eros'`. |
 | `platformUserId` | Unique user ID from the host platform. |
-| `platformToken` | Login credential issued by the host platform for the current user. |
+| `platformToken` | Random string. |
 | `username` | User display name. |
 
 Example:
@@ -64,12 +63,12 @@ Example:
 await Playsout.Login({
   platform: 'eros',
   platformUserId: '10',
-  platformToken: 'platform_token',
+  platformToken: 'random-string',
   username: 'TestUser',
 });
 ```
 
-`platformToken` is a required, non-empty string. Playsout Web SDK does not impose any specific format or content requirements; it only validates the type and forwards the value to the backend unchanged.
+`platformToken` is a required, non-empty random string.
 
 ## HTML Integration
 
@@ -90,23 +89,37 @@ Place the following code in `index.html`:
 
     <script src="https://unpkg.com/playsout-web-sdk/index.iife.js"></script>
     <script>
-      async function ensureLogin() {
-        if (!window.Playsout.isLoggedIn) {
-          await window.Playsout.Login({
+      let loginPromise = null;
+
+      function login() {
+        if (!loginPromise) {
+          loginPromise = window.Playsout.Login({
             platform: 'eros',
             platformUserId: '10',
-            platformToken: 'platform_token',
+            platformToken: 'random-string',
             username: 'TestUser'
+          }).finally(function () {
+            loginPromise = null;
           });
-          return;
         }
 
-        // Refresh once only when the page needs the latest backend user data.
-        return window.Playsout.getUserInfo();
+        return loginPromise;
+      }
+
+      async function ensureLogin() {
+        if (!window.Playsout.isLoggedIn) {
+          return login();
+        }
       }
 
       async function bootstrap() {
         await window.Playsout.init({ locale: 'zh' });
+
+        window.Playsout.on('authExpired', function () {
+          login().catch(function (error) {
+            console.error('Playsout re-login failed:', error);
+          });
+        });
 
         await ensureLogin();
 
@@ -198,7 +211,7 @@ Place this code in the page component that displays the game list. In a new Vue 
 ```vue
 <script setup>
 import { watch } from 'vue';
-import { usePlaysout, Playsout } from 'playsout-web-sdk/vue';
+import { usePlaysout } from 'playsout-web-sdk/vue';
 
 const {
   isInitialized,
@@ -207,25 +220,27 @@ const {
   Login,
 } = usePlaysout();
 
-async function ensureLoginAndUserInfo() {
-  if (!isLoggedIn.value) {
-    await Login({
+let loginPromise = null;
+
+function login() {
+  if (!loginPromise) {
+    loginPromise = Login({
       platform: 'eros',
       platformUserId: '10',
-      platformToken: 'platform_token',
+      platformToken: 'random-string',
       username: 'TestUser',
+    }).finally(() => {
+      loginPromise = null;
     });
-    return;
   }
 
-  // Refresh once only when the page needs the latest backend user data.
-  await Playsout.getUserInfo();
+  return loginPromise;
 }
 
-watch(isInitialized, (initialized) => {
-  if (!initialized) return;
+watch([isInitialized, isLoggedIn], ([initialized, loggedIn]) => {
+  if (!initialized || loggedIn) return;
 
-  ensureLoginAndUserInfo().catch((error) => {
+  login().catch((error) => {
     console.error('Playsout login flow failed:', error);
   });
 }, { immediate: true });
@@ -279,39 +294,31 @@ import { useEffect, useRef } from 'react';
 import { usePlaysout } from 'playsout-web-sdk/react';
 
 export default function App() {
-  const loginFlowStarted = useRef(false);
+  const loginInFlight = useRef(false);
   const {
     isInitialized,
     isLoggedIn,
     locale,
     Login,
-    getUserInfo,
   } = usePlaysout();
 
   useEffect(() => {
-    if (!isInitialized || loginFlowStarted.current) return;
-    loginFlowStarted.current = true;
+    if (!isInitialized || isLoggedIn || loginInFlight.current) return;
+    loginInFlight.current = true;
 
-    async function ensureLoginAndUserInfo() {
-      if (!isLoggedIn) {
-        await Login({
-          platform: 'eros',
-          platformUserId: '10',
-          platformToken: 'platform_token',
-          username: 'TestUser',
-        });
-        return;
-      }
-
-      // Refresh once only when the page needs the latest backend user data.
-      await getUserInfo();
-    }
-
-    ensureLoginAndUserInfo().catch((error) => {
-      loginFlowStarted.current = false;
-      console.error('Playsout login flow failed:', error);
-    });
-  }, [isInitialized, isLoggedIn, Login, getUserInfo]);
+    Login({
+      platform: 'eros',
+      platformUserId: '10',
+      platformToken: 'random-string',
+      username: 'TestUser',
+    })
+      .catch((error) => {
+        console.error('Playsout login flow failed:', error);
+      })
+      .finally(() => {
+        loginInFlight.current = false;
+      });
+  }, [isInitialized, isLoggedIn, Login]);
 
   return (
     <playsout-widget
@@ -391,7 +398,7 @@ window.Playsout.on('authExpired', function () {
 });
 ```
 
-React and Vue applications can also listen through the public `Playsout.on('authExpired', handler)` API.
+React and Vue adapters synchronize their reactive login state when `authExpired` is emitted. A watcher or effect that logs in whenever initialization is complete and `isLoggedIn` becomes false will therefore handle both startup and runtime expiration.
 
 ## Image Loading
 
