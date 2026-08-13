@@ -113,7 +113,7 @@ Place the following code in `index.html`:
       }
 
       async function bootstrap() {
-        await window.Playsout.init({ locale: 'zh' });
+        await window.Playsout.init({ locale: 'en' });
 
         window.Playsout.on('authExpired', function () {
           login().catch(function (error) {
@@ -141,12 +141,12 @@ Place the following code in `index.html`:
 Common HTML / IIFE APIs:
 
 ```js
-window.Playsout.init({ locale: 'zh' });
+window.Playsout.init({ locale: 'en' });
 window.Playsout.isLoggedIn;
 window.Playsout.Login(params);
 window.Playsout.getUserInfo();
 window.Playsout.getUser();
-window.Playsout.setLocale('en');
+window.Playsout.setLocale('zh');
 window.Playsout.getLocale();
 ```
 
@@ -195,7 +195,7 @@ const app = createApp(App);
 
 app.use(createPlaysoutPlugin({
   config: {
-    locale: 'zh',
+    locale: 'en',
   },
 }));
 
@@ -258,7 +258,7 @@ Vue notes:
 
 - The page waits for plugin initialization, then checks the login state and runs the login flow automatically.
 - `locale` controls the widget language.
-- For a fixed default language, `config: { locale: 'zh' }` in the entry file is sufficient. If the application later needs dynamic locale switching, call `setLocale('en')` and bind `locale`.
+- For a fixed default language, `config: { locale: 'en' }` in the entry file is sufficient. If the application later needs dynamic locale switching, call `setLocale('zh')` and bind `locale`.
 - `user-points="1000"` seeds the widget's frontend gem balance. Iframe game payments can deduct from this in-session balance only.
 - If the application already has a game page, place the logic in that page component.
 
@@ -277,7 +277,7 @@ import 'playsout-web-sdk/web-components';
 import App from './App.jsx';
 
 createRoot(document.getElementById('root')).render(
-  <PlaysoutProvider config={{ locale: 'zh' }}>
+  <PlaysoutProvider config={{ locale: 'en' }}>
     <App />
   </PlaysoutProvider>
 );
@@ -334,7 +334,7 @@ React notes:
 - `PlaysoutProvider` initializes the SDK.
 - After Provider initialization, the page checks the login state and runs the login flow once.
 - `usePlaysout()` provides the login state, login method, user information method, and locale APIs.
-- For a fixed default language, `<PlaysoutProvider config={{ locale: 'zh' }}>` is sufficient. If the application later needs dynamic locale switching, call `setLocale('en')` and bind `locale`.
+- For a fixed default language, `<PlaysoutProvider config={{ locale: 'en' }}>` is sufficient. If the application later needs dynamic locale switching, call `setLocale('zh')` and bind `locale`.
 - React does not need Vue's `isCustomElement` configuration.
 
 ## Common API Reference
